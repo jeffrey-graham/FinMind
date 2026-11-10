@@ -60,6 +60,25 @@ class Observability:
             ["event", "channel", "status"],
             registry=self.registry,
         )
+        self.background_jobs_total = Counter(
+            "finmind_background_jobs_total",
+            "Total background job executions by job_type and status.",
+            ["job_type", "status"],
+            registry=self.registry,
+        )
+        self.background_job_retries_total = Counter(
+            "finmind_background_job_retries_total",
+            "Total background job retries scheduled by job_type.",
+            ["job_type"],
+            registry=self.registry,
+        )
+        self.background_job_duration_seconds = Histogram(
+            "finmind_background_job_duration_seconds",
+            "Background job execution duration in seconds by job_type.",
+            ["job_type"],
+            buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+            registry=self.registry,
+        )
 
     def observe_http_request(
         self, method: str, endpoint: str, status_code: int, duration_seconds: float
@@ -78,6 +97,21 @@ class Observability:
         self.reminder_events_total.labels(
             event=event, channel=channel, status=status
         ).inc()
+
+    def record_background_job(
+        self,
+        job_type: str,
+        status: str,
+        duration_seconds: float | None = None,
+        retried: bool = False,
+    ) -> None:
+        self.background_jobs_total.labels(job_type=job_type, status=status).inc()
+        if retried:
+            self.background_job_retries_total.labels(job_type=job_type).inc()
+        if duration_seconds is not None:
+            self.background_job_duration_seconds.labels(job_type=job_type).observe(
+                duration_seconds
+            )
 
     def metrics_response(self) -> Response:
         if self.multiprocess_enabled:
@@ -137,3 +171,22 @@ def track_reminder_event(event: str, channel: str, status: str = "ok") -> None:
     obs = current_app.extensions.get("observability")
     if obs:
         obs.record_reminder_event(event=event, channel=channel, status=status)
+
+
+def track_background_job(
+    job_type: str,
+    status: str,
+    duration_seconds: float | None = None,
+    retried: bool = False,
+) -> None:
+    try:
+        obs = current_app.extensions.get("observability")
+        if obs:
+            obs.record_background_job(
+                job_type=job_type,
+                status=status,
+                duration_seconds=duration_seconds,
+                retried=retried,
+            )
+    except RuntimeError:
+        pass

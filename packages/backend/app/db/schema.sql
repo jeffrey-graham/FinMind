@@ -123,3 +123,24 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   action VARCHAR(100) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS background_jobs (
+  id SERIAL PRIMARY KEY,
+  user_id INT REFERENCES users(id) ON DELETE CASCADE,
+  job_type VARCHAR(100) NOT NULL,
+  payload TEXT,
+  status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+  attempts INT NOT NULL DEFAULT 0,
+  max_attempts INT NOT NULL DEFAULT 3,
+  base_delay_seconds INT NOT NULL DEFAULT 30,
+  next_run_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  last_error VARCHAR(1000),
+  idempotency_key VARCHAR(255) UNIQUE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_background_jobs_due ON background_jobs(status, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_background_jobs_user ON background_jobs(user_id, status);
+
